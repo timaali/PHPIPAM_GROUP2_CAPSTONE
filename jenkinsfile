@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build and Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.example.com', 'docker-credentials-id') {
+                        def imageName = "phpipam:${BUILD_NUMBER}"
+                        def appPath = "./path/to/phpipam/app"
+                        
+                        docker.build(imageName, appPath)
+                        docker.image(imageName).push()
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to EC2') {
+            steps {
+                script {
+                    sshagent(['ssh-credentials-id']) {
+                        def remote = [:]
+                        remote.name = 'PHPIPAM-PROJECT'
+                        remote.host = '13.38.9.241'
+                        remote.user = 'ubuntu'
+                        remote.allowAnyHosts = true
+                        
+                        sshCommand remote: remote, command: '''
+                            docker-compose -f docker-compose.yml pull
+                            docker-compose -f docker-compose.yml up -d
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}
